@@ -1,0 +1,401 @@
+     1                                  ; ====================================================================
+     2                                  ; Title:        Mersenne Twister 64-bit PRNG (MT19937-64)
+     3                                  ; Build:        nasm -felf64 mt19937_64.asm -o mt19937_64.o
+     4                                  ;               ld -s -melf_x86_64 -o mt19937_64 mt19937_64.o
+     5                                  ; References:   Takuji Nishimura and Makoto Matsumoto (2004/9/29 C Version)
+     6                                  ;               http://www.math.hiroshima-u.ac.jp/~m-mat/MT/emt.html
+     7                                  ; ====================================================================
+     8                                  
+     9                                  BITS 64
+    10                                  GLOBAL _start
+    11                                  
+    12                                  ; Algorithm Constants Definitions
+    13                                  %define NN          312
+    14                                  %define MM          156
+    15                                  %define MATRIX_A    0xB5026F5AA96619E9
+    16                                  %define UM          0xFFFFFFFF80000000
+    17                                  %define LM          0x000000007FFFFFFF
+    18                                  
+    19                                  section .bss
+    20                                      align 8
+    21 00000000 <res 9C0h>                  mt:             resq    NN              ; The internal state vector array
+    22 000009C0 ????????                    mti:            resd    1               ; State tracking index (32-bit int)
+    23 000009C4 <res 20h>                   ascii_buf:      resb    32              ; Buffer zone for textual formatting
+    24                                  
+    25                                  section .data
+    26                                      align 8
+    27 00000000 452301000000000056-         init_array:     dq      0x12345, 0x23456, 0x34567, 0x45678
+    27 00000009 340200000000006745-
+    27 00000012 030000000000785604-
+    27 0000001B 0000000000         
+    28 00000020 0400000000000000            init_len:       dq      4
+    29                                  
+    30 00000028 31303030206F757470-         txt_title:      db      "1000 outputs of genrand64_int64()", 10
+    30 00000031 757473206F66206765-
+    30 0000003A 6E72616E6436345F69-
+    30 00000043 6E74363428290A     
+    31                                      .len:           equ     $-txt_title
+    32                                      
+    33 0000004A 20                          space:          db      " "
+    34 0000004B 0A                          newline:        db      10
+    35                                  
+    36                                  section .text
+    37                                  
+    38                                  _start:
+    39                                      ; 1. Initialize the internal PRNG vector engine using the array block
+    40 00000000 48BF-                       mov     rdi, init_array
+    40 00000002 [0000000000000000] 
+    41 0000000A 488B3425[20000000]          mov     rsi, [init_len]
+    42 00000012 E8F7000000                  call    init_by_array64
+    43                                  
+    44                                      ; 2. Print out structural presentation title banner string
+    45 00000017 BF01000000                  mov     rdi, 1                          ; stdout
+    46 0000001C 48BE-                       mov     rsi, txt_title
+    46 0000001E [2800000000000000] 
+    47 00000026 BA22000000                  mov     rdx, txt_title.len
+    48 0000002B B801000000                  mov     rax, 1                          ; sys_write
+    49 00000030 0F05                        syscall
+    50                                  
+    51                                      ; 3. Core Loop: Generate and display exactly 1000 values
+    52 00000032 4D31E4                      xor     r12, r12                        ; Loop iterator index i = 0
+    53                                  
+    54                                  .generation_loop:
+    55 00000035 E8E7010000                  call    genrand64_int64                 ; Returns 64-bit random number inside rax
+    56                                      
+    57                                      ; Save loop metrics before handing control to the console I/O subsystem
+    58 0000003A 50                          push    rax
+    59                                      
+    60                                      ; Convert raw value inside RAX into an aligned ASCII output string
+    61 0000003B E85F030000                  call    print_uint64
+    62                                      
+    63                                      ; Print space padding separator
+    64 00000040 BF01000000                  mov     rdi, 1
+    65 00000045 48BE-                       mov     rsi, space
+    65 00000047 [4A00000000000000] 
+    66 0000004F BA01000000                  mov     rdx, 1
+    67 00000054 B801000000                  mov     rax, 1                          ; sys_write
+    68 00000059 0F05                        syscall
+    69                                  
+    70                                      ; Check layout configurations: if (i % 5 == 4) print a newline element
+    71 0000005B 4C89E0                      mov     rax, r12
+    72 0000005E 4831D2                      xor     rdx, rdx
+    73 00000061 B905000000                  mov     rcx, 5
+    74 00000066 48F7F1                      div     rcx                             ; Remainder drops into RDX
+    75 00000069 4883FA04                    cmp     rdx, 4
+    76 0000006D 751B                        jne     .skip_newline
+    77                                  
+    78 0000006F BF01000000                  mov     rdi, 1
+    79 00000074 48BE-                       mov     rsi, newline
+    79 00000076 [4B00000000000000] 
+    80 0000007E BA01000000                  mov     rdx, 1
+    81 00000083 B801000000                  mov     rax, 1                          ; sys_write
+    82 00000088 0F05                        syscall
+    83                                  
+    84                                  .skip_newline:
+    85 0000008A 58                          pop     rax
+    86 0000008B 49FFC4                      inc     r12
+    87 0000008E 4981FCE8030000              cmp     r12, 1000
+    88 00000095 7C9E                        jl      .generation_loop
+    89                                  
+    90                                      ; Extra structural spacer format line
+    91 00000097 BF01000000                  mov     rdi, 1
+    92 0000009C 48BE-                       mov     rsi, newline
+    92 0000009E [4B00000000000000] 
+    93 000000A6 BA01000000                  mov     rdx, 1
+    94 000000AB B801000000                  mov     rax, 1
+    95 000000B0 0F05                        syscall
+    96                                  
+    97                                      ; 4. Execution context wrap-up
+    98 000000B2 BF00000000                  mov     rdi, 0                          ; safe zero status return code
+    99 000000B7 B83C000000                  mov     rax, 60                         ; sys_exit
+   100 000000BC 0F05                        syscall
+   101                                  
+   102                                  
+   103                                  ; ====================================================================
+   104                                  ; Function: init_genrand64
+   105                                  ; Input:    rdi = 64-bit unsigned integer seed value
+   106                                  ; ====================================================================
+   107                                  init_genrand64:
+   108 000000BE 48893C25[00000000]          mov     qword [mt], rdi                 ; mt[0] = seed
+   109 000000C6 B901000000                  mov     ecx, 1                          ; mti loop counter tracking
+   110 000000CB 49B82D7F954C2DF451-         mov     r8, 6364136223846793005         ; Constant multiplier element
+   110 000000D4 58                 
+   111                                  
+   112                                  .init_loop:
+   113 000000D5 488B04CD[F8FFFFFF]          mov     rax, qword [mt + rcx*8 - 8]     ; Fetch mt[mti-1]
+   114 000000DD 4889C2                      mov     rdx, rax
+   115 000000E0 48C1EA3E                    shr     rdx, 62                         ; mt[mti-1] >> 62
+   116 000000E4 4831D0                      xor     rax, rdx                        ; (mt[mti-1] ^ (mt[mti-1] >> 62))
+   117 000000E7 490FAFC0                    imul    rax, r8                         ; Multiplied by magic constant
+   118 000000EB 4801C8                      add     rax, rcx                        ; + mti
+   119 000000EE 488904CD[00000000]          mov     qword [mt + rcx*8], rax         ; Store inside mt[mti]
+   120                                      
+   121 000000F6 48FFC1                      inc     rcx
+   122 000000F9 4881F938010000              cmp     rcx, NN
+   123 00000100 7CD3                        jl      .init_loop
+   124                                  
+   125 00000102 C70425[C0090000]38-         mov     dword [mti], NN                 ; Set global index state flag
+   125 0000010A 010000             
+   126 0000010D C3                          ret
+   127                                  
+   128                                  
+   129                                  ; ====================================================================
+   130                                  ; Function: init_by_array64
+   131                                  ; Inputs:   rdi = init_key[] array base pointer, rsi = key_length
+   132                                  ; ====================================================================
+   133                                  init_by_array64:
+   134 0000010E 4154                        push    r12
+   135 00000110 4155                        push    r13
+   136 00000112 4156                        push    r14
+   137 00000114 4157                        push    r15
+   138                                  
+   139 00000116 4989FC                      mov     r12, rdi                        ; r12 = init_key base address
+   140 00000119 4989F5                      mov     r13, rsi                        ; r13 = key_length
+   141                                  
+   142                                      ; Run foundational seed setup routine first
+   143 0000011C BFAAD62B01                  mov     rdi, 19650218
+   144 00000121 E898FFFFFF                  call    init_genrand64
+   145                                  
+   146 00000126 41BE01000000                mov     r14, 1                          ; i = 1
+   147 0000012C 4D31FF                      xor     r15, r15                        ; j = 0
+   148                                  
+   149                                      ; Set loop index k limits framework: k = (NN > key_length ? NN : key_length)
+   150 0000012F B938010000                  mov     rcx, NN
+   151 00000134 4C39E9                      cmp     rcx, r13
+   152 00000137 490F42CD                    cmovb   rcx, r13                        ; rcx = Loop limit counter 'k'
+   153 0000013B 49BB853FA5310FEA9D-         mov     r11, 3935559000370003845        ; Multiplier constant setup
+   153 00000144 36                 
+   154                                  
+   155                                  .array_pass_1:
+   156 00000145 51                          push    rcx
+   157 00000146 4A8B04F5[F8FFFFFF]          mov     rax, qword [mt + r14*8 - 8]     ; mt[i-1]
+   158 0000014E 4889C2                      mov     rdx, rax
+   159 00000151 48C1EA3E                    shr     rdx, 62
+   160 00000155 4831D0                      xor     rax, rdx
+   161 00000158 490FAFC3                    imul    rax, r11                        ; (...) * constant
+   162 0000015C 4A3304F5[00000000]          xor     rax, qword [mt + r14*8]         ; mt[i] ^ (...)
+   163 00000164 4B0304FC                    add     rax, qword [r12 + r15*8]        ; + init_key[j]
+   164 00000168 4C01F8                      add     rax, r15                        ; + j
+   165 0000016B 4A8904F5[00000000]          mov     qword [mt + r14*8], rax         ; Save back to mt[i]
+   166                                  
+   167 00000173 49FFC6                      inc     r14                             ; i++
+   168 00000176 49FFC7                      inc     r15                             ; j++
+   169                                      
+   170 00000179 4981FE38010000              cmp     r14, NN
+   171 00000180 7C16                        jl      .skip_i_reset_1
+   172 00000182 488B0425[B8090000]          mov     rax, qword [mt + NN*8 - 8]
+   173 0000018A 48890425[00000000]          mov     qword [mt], rax                 ; mt[0] = mt[NN-1]
+   174 00000192 41BE01000000                mov     r14, 1                          ; i = 1
+   175                                  .skip_i_reset_1:
+   176                                  
+   177 00000198 4D39EF                      cmp     r15, r13
+   178 0000019B 7C03                        jl      .skip_j_reset_1
+   179 0000019D 4D31FF                      xor     r15, r15                        ; j = 0
+   180                                  .skip_j_reset_1:
+   181 000001A0 59                          pop     rcx
+   182 000001A1 48FFC9                      dec     rcx
+   183 000001A4 759F                        jnz     .array_pass_1
+   184                                  
+   185                                      ; Secondary Non-linear Pass Implementation
+   186 000001A6 B937010000                  mov     rcx, NN - 1                     ; k = NN - 1
+   187 000001AB 49BBFDB0B087E62EBB-         mov     r11, 2862933555777941757        ; New multiplier constant factor
+   187 000001B4 27                 
+   188                                  
+   189                                  .array_pass_2:
+   190 000001B5 51                          push    rcx
+   191 000001B6 4A8B04F5[F8FFFFFF]          mov     rax, qword [mt + r14*8 - 8]     ; mt[i-1]
+   192 000001BE 4889C2                      mov     rdx, rax
+   193 000001C1 48C1EA3E                    shr     rdx, 62
+   194 000001C5 4831D0                      xor     rax, rdx
+   195 000001C8 490FAFC3                    imul    rax, r11
+   196 000001CC 4A3304F5[00000000]          xor     rax, qword [mt + r14*8]
+   197 000001D4 4C29F0                      sub     rax, r14                        ; - i
+   198 000001D7 4A8904F5[00000000]          mov     qword [mt + r14*8], rax
+   199                                  
+   200 000001DF 49FFC6                      inc     r14                             ; i++
+   201 000001E2 4981FE38010000              cmp     r14, NN
+   202 000001E9 7C16                        jl      .skip_i_reset_2
+   203 000001EB 488B0425[B8090000]          mov     rax, qword [mt + NN*8 - 8]
+   204 000001F3 48890425[00000000]          mov     qword [mt], rax
+   205 000001FB 41BE01000000                mov     r14, 1
+   206                                  .skip_i_reset_2:
+   207 00000201 59                          pop     rcx
+   208 00000202 48FFC9                      dec     rcx
+   209 00000205 75AE                        jnz     .array_pass_2
+   210                                  
+   211                                      ; Assure that the MSB bit remains locked high to guarantee safe non-zero state matrices
+   212 00000207 B801000000                  mov     rax, 1
+   213 0000020C 48C1E03F                    shl     rax, 63
+   214 00000210 48890425[00000000]          mov     qword [mt], rax
+   215                                  
+   216 00000218 415F                        pop     r15
+   217 0000021A 415E                        pop     r14
+   218 0000021C 415D                        pop     r13
+   219 0000021E 415C                        pop     r12
+   220 00000220 C3                          ret
+   221                                  
+   222                                  
+   223                                  ; ====================================================================
+   224                                  ; Function: genrand64_int64
+   225                                  ; Output:   rax = 64-bit pseudo-random unsigned integer value
+   226                                  ; ====================================================================
+   227                                  genrand64_int64:
+   228 00000221 448B0425[C0090000]          mov     r8d, dword [mti]
+   229 00000229 4181F838010000              cmp     r8d, NN
+   230 00000230 7363                        jae     .twist_required                 ; Trigger generation block if index past limit
+   231                                  
+   232                                  .extract_and_temper:
+   233                                      movzx   r8, r8d
+   233          ******************       error: invalid combination of opcode and operands
+   234 00000232 4A8B04C5[00000000]          mov     rax, qword [mt + r8*8]          ; Extract value from vector indices
+   235 0000023A 41FFC0                      inc     r8d
+   236 0000023D 44890425[C0090000]          mov     dword [mti], r8d                ; Save back updated mti step increment
+   237                                      
+   238                                      ; Tempered operations sequences matrix pipeline transforms
+   239 00000245 4889C2                      mov     rdx, rax
+   240 00000248 48C1EA1D                    shr     rdx, 29
+   241 0000024C 48B955555555555555-         mov     rcx, 0x5555555555555555
+   241 00000255 55                 
+   242 00000256 4821CA                      and     rdx, rcx
+   243 00000259 4831D0                      xor     rax, rdx
+   244                                  
+   245 0000025C 4889C2                      mov     rdx, rax
+   246 0000025F 48C1E211                    shl     rdx, 17
+   247 00000263 48B90000A6EDFF7FD6-         mov     rcx, 0x71D67FFFEDA60000
+   247 0000026C 71                 
+   248 0000026D 4821CA                      and     rdx, rcx
+   249 00000270 4831D0                      xor     rax, rdx
+   250                                  
+   251 00000273 4889C2                      mov     rdx, rax
+   252 00000276 48C1E225                    shl     rdx, 37
+   253 0000027A 48B900000000E0EEF7-         mov     rcx, 0xFFF7EEE000000000
+   253 00000283 FF                 
+   254 00000284 4821CA                      and     rdx, rcx
+   255 00000287 4831D0                      xor     rax, rdx
+   256                                  
+   257 0000028A 4889C2                      mov     rdx, rax
+   258 0000028D 48C1EA2B                    shr     rdx, 43
+   259 00000291 4831D0                      xor     rax, rdx
+   260 00000294 C3                          ret                                     ; Fully tempered value returned in RAX
+   261                                  
+   262                                  .twist_required:
+   263                                      ; Verify that baseline setups have occurred, otherwise apply default seed fallback
+   264 00000295 4181F839010000              cmp     r8d, NN + 1
+   265 0000029C 750A                        jne     .run_twist_loop
+   266 0000029E BF71150000                  mov     rdi, 5489
+   267 000002A3 E816FEFFFF                  call    init_genrand64
+   268                                  
+   269                                  .run_twist_loop:
+   270 000002A8 31C9                        xor     ecx, ecx                        ; Loop counter variable 'i' = 0
+   271 000002AA 49C7C100000080              mov     r9, UM
+   272 000002B1 41BAFFFFFF7F                mov     r10, LM
+   273                                  
+   274                                  .twist_block_1:
+   275 000002B7 488B04CD[00000000]          mov     rax, qword [mt + rcx*8]
+   276 000002BF 4C21C8                      and     rax, r9                         ; mt[i] & UM
+   277 000002C2 488B14CD[08000000]          mov     rdx, qword [mt + rcx*8 + 8]
+   278 000002CA 4C21D2                      and     rdx, r10                        ; mt[i+1] & LM
+   279 000002CD 4809D0                      or      rax, rdx                        ; rax = x = (mt[i]&UM)|(mt[i+1]&LM)
+   280                                      
+   281 000002D0 4889C2                      mov     rdx, rax
+   282 000002D3 48D1EA                      shr     rdx, 1                          ; x >> 1
+   283                                      
+   284                                      ; Process mag01 array mappings inline without conditional branching anomalies
+   285 000002D6 48A901000000                test    rax, 1
+   286 000002DC 7407                        jz      .no_matrix_a_1
+   287 000002DE 4881F2E91966A9              xor     rdx, MATRIX_A
+   287          ******************       warning: signed dword immediate exceeds bounds [-w+number-overflow]
+   287          ******************       warning: dword data exceeds bounds [-w+number-overflow]
+   288                                  .no_matrix_a_1:
+   289 000002E5 483314CD[E0040000]          xor     rdx, qword [mt + rcx*8 + MM*8]  ; ^ mt[i+MM]
+   290 000002ED 488914CD[00000000]          mov     qword [mt + rcx*8], rdx
+   291                                      
+   292 000002F5 48FFC1                      inc     rcx
+   293 000002F8 4881F99C000000              cmp     rcx, NN - MM
+   294 000002FF 7CB6                        jl      .twist_block_1
+   295                                  
+   296                                  .twist_block_2:
+   297 00000301 488B04CD[00000000]          mov     rax, qword [mt + rcx*8]
+   298 00000309 4C21C8                      and     rax, r9
+   299 0000030C 488B14CD[08000000]          mov     rdx, qword [mt + rcx*8 + 8]
+   300 00000314 4C21D2                      and     rdx, r10
+   301 00000317 4809D0                      or      rax, rdx                        ; x assembled
+   302                                      
+   303 0000031A 4889C2                      mov     rdx, rax
+   304 0000031D 48D1EA                      shr     rdx, 1
+   305 00000320 48A901000000                test    rax, 1
+   306 00000326 7407                        jz      .no_matrix_a_2
+   307 00000328 4881F2E91966A9              xor     rdx, MATRIX_A
+   307          ******************       warning: signed dword immediate exceeds bounds [-w+number-overflow]
+   307          ******************       warning: dword data exceeds bounds [-w+number-overflow]
+   308                                  .no_matrix_a_2:
+   309 0000032F 483314CD[20FBFFFF]          xor     rdx, qword [mt + rcx*8 + (MM-NN)*8] ; ^ mt[i+(MM-NN)]
+   310 00000337 488914CD[00000000]          mov     qword [mt + rcx*8], rdx
+   311                                      
+   312 0000033F 48FFC1                      inc     rcx
+   313 00000342 4881F937010000              cmp     rcx, NN - 1
+   314 00000349 7CB6                        jl      .twist_block_2
+   315                                  
+   316                                      ; Final boundary anomalies execution step row wrap up
+   317 0000034B 488B0425[B8090000]          mov     rax, qword [mt + (NN-1)*8]
+   318 00000353 4C21C8                      and     rax, r9
+   319 00000356 488B1425[00000000]          mov     rdx, qword [mt]
+   320 0000035E 4C21D2                      and     rdx, r10
+   321 00000361 4809D0                      or      rax, rdx                        ; Final 'x' value assembled
+   322                                      
+   323 00000364 4889C2                      mov     rdx, rax
+   324 00000367 48D1EA                      shr     rdx, 1
+   325 0000036A 48A901000000                test    rax, 1
+   326 00000370 7407                        jz      .no_matrix_a_final
+   327 00000372 4881F2E91966A9              xor     rdx, MATRIX_A
+   327          ******************       warning: signed dword immediate exceeds bounds [-w+number-overflow]
+   327          ******************       warning: dword data exceeds bounds [-w+number-overflow]
+   328                                  .no_matrix_a_final:
+   329 00000379 48331425[D8040000]          xor     rdx, qword [mt + (MM-1)*8]      ; ^ mt[MM-1]
+   330 00000381 48891425[B8090000]          mov     qword [mt + (NN-1)*8], rdx
+   331                                  
+   332 00000389 C70425[C0090000]00-         mov     dword [mti], 0                  ; Reset index matrix reference parameters
+   332 00000391 000000             
+   333 00000394 41B800000000                mov     r8d, 0
+   334 0000039A E993FEFFFF                  jmp     .extract_and_temper
+   335                                  
+   336                                  
+   337                                  ; ====================================================================
+   338                                  ; Function: print_uint64
+   339                                  ; Input:    rax = 64-bit integer payload value to print to screen
+   340                                  ; ====================================================================
+   341                                  print_uint64:
+   342 0000039F 488D3C25[E3090000]          lea     rdi, [ascii_buf + 31]
+   343 000003A7 C60700                      mov     byte [rdi], 0                   ; Inject string line suffix bounds terminator
+   344 000003AA B90A000000                  mov     rcx, 10                         ; Base 10 division configuration
+   345                                  
+   346                                      ; Explicit loop to implement aligned width output padding metrics
+   347 000003AF 41BB14000000                mov     r11, 20                         ; We enforce a 20-character width space layout
+   348                                  
+   349                                  .conversion_loop:
+   350 000003B5 4831D2                      xor     rdx, rdx
+   351 000003B8 48F7F1                      div     rcx                             ; rax = quotient, rdx = remainder character numeric value
+   352 000003BB 80C230                      add     dl, '0'
+   353 000003BE 48FFCF                      dec     rdi
+   354 000003C1 8817                        mov     [rdi], dl
+   355 000003C3 49FFCB                      dec     r11
+   356 000003C6 4885C0                      test    rax, rax
+   357 000003C9 75EA                        jnz     .conversion_loop
+   358                                  
+   359                                      ; Apply character spacing layout padding overrides to clean up formatting
+   360 000003CB 4D85DB                      test    r11, r11
+   361 000003CE 740B                        jz      .flush_buffer
+   362                                  .pad_loop:
+   363 000003D0 48FFCF                      dec     rdi
+   364 000003D3 C60720                      mov     byte [rdi], ' '                 ; Pad spaces to align rows cleanly
+   365 000003D6 49FFCB                      dec     r11
+   366 000003D9 75F5                        jnz     .pad_loop
+   367                                  
+   368                                  .flush_buffer:
+   369 000003DB 488D1425[E3090000]          lea     rdx, [ascii_buf + 31]
+   370 000003E3 4829FA                      sub     rdx, rdi                        ; Calculate visual buffer character length width
+   371 000003E6 4889FE                      mov     rsi, rdi
+   372 000003E9 BF01000000                  mov     rdi, 1                          ; stdout
+   373 000003EE B801000000                  mov     rax, 1                          ; sys_write
+   374 000003F3 0F05                        syscall
+   375 000003F5 C3                          ret
