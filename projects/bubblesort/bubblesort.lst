@@ -1,0 +1,561 @@
+     1                                  ;name:        bubblesort_demo.asm
+     2                                  ;description: Demonstration of 3 BubbleSort Algorithms in one single run to compare
+     3                                  ;             iterations and swaps.
+     4                                  ;
+     5                                  ;build:       nasm -felf64 bubblesort_demo.asm -o bubblesort_demo.o
+     6                                  ;             ld -s -melf_x86_64 -o bubblesort_demo bubblesort_demo.o
+     7                                  
+     8                                  bits 64
+     9                                  
+    10                                  [list -]
+    13                                  
+    14                                  %define TRUE      1
+    15                                  %define FALSE     0
+    16                                  
+    17                                  %macro STRING 1
+    18                                      .start:     db %1
+    19                                      .length:    equ $-.start
+    20                                  %endmacro
+    21                                  
+    22                                  %macro ARRAY 1-*
+    23                                      %rep  %0
+    24                                           dq  %1
+    25                                           %rotate 1
+    26                                      %endrep 
+    27                                  %endmacro
+    28                                  
+    29                                  section .bss
+    30                                  Buffer:
+    31 00000000 ??                          sign           resb      1              ; ascii sign
+    32 00000001 <res 13h>                   decimal        resb     19              ; 20 bytes to store a 64 bits number + sign
+    33                                  
+    34                                  ; Een werkbuffer om de array in te kopiëren voor elke sortering
+    35 00000014 <res F0h>               work_array:        resq     30
+    36                                  
+    37                                  section .data
+    38                                  
+    39                                      datasize:      equ       8   
+    40                                      ; De originele ongesorteerde array (wurst case)
+    41                                      orig_array:    ARRAY     154,2144,119,98,4,520,2, 75, 15, 0, -85,-4, -78,-54, -485,-458,-25, -92,-233,720,368,547,758,8, -233,72,-36,854,-775,807
+    41                              <1>  orig_array: 
+    23                              <1>  %rep %0
+    24                              <1>  dq %1
+    25                              <1>  %rotate 1
+    26                              <1>  %endrep
+    24 00000000 9A00000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000008 6008000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000010 7700000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000018 6200000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000020 0400000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000028 0802000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000030 0200000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000038 4B00000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000040 0F00000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000048 0000000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000050 ABFFFFFFFFFFFFFF    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000058 FCFFFFFFFFFFFFFF    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000060 B2FFFFFFFFFFFFFF    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000068 CAFFFFFFFFFFFFFF    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000070 1BFEFFFFFFFFFFFF    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000078 36FEFFFFFFFFFFFF    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000080 E7FFFFFFFFFFFFFF    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000088 A4FFFFFFFFFFFFFF    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000090 17FFFFFFFFFFFFFF    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 00000098 D002000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 000000A0 7001000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 000000A8 2302000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 000000B0 F602000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 000000B8 0800000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 000000C0 17FFFFFFFFFFFFFF    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 000000C8 4800000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 000000D0 DCFFFFFFFFFFFFFF    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 000000D8 5603000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 000000E0 F9FCFFFFFFFFFFFF    <2>  dq %1
+    25                              <2>  %rotate 1
+    24 000000E8 2703000000000000    <2>  dq %1
+    25                              <2>  %rotate 1
+    42                                      .length        equ       ($-orig_array)/datasize
+    43                                  
+    44                                      title:         STRING    {"Bubblesort Algorithm Comparison - Agguro 2012 / Demo 2026",10,"==========================================================",10}
+    44                              <1>  title: 
+    18 000000F0 427562626C65736F72- <1>  .start: db %1
+    18 000000F9 7420416C676F726974- <1>
+    18 00000102 686D20436F6D706172- <1>
+    18 0000010B 69736F6E202D204167- <1>
+    18 00000114 6775726F2032303132- <1>
+    18 0000011D 202F2044656D6F2032- <1>
+    18 00000126 3032360A3D3D3D3D3D- <1>
+    18 0000012F 3D3D3D3D3D3D3D3D3D- <1>
+    18 00000138 3D3D3D3D3D3D3D3D3D- <1>
+    18 00000141 3D3D3D3D3D3D3D3D3D- <1>
+    18 0000014A 3D3D3D3D3D3D3D3D3D- <1>
+    18 00000153 3D3D3D3D3D3D3D3D3D- <1>
+    18 0000015C 3D3D3D3D3D3D3D3D0A  <1>
+    19                              <1>  .length: equ $-.start
+    45                                  
+    46                                      opt0_str:      STRING    {10,"--- [RUN 1] Optimization step: no optimization ---",10}
+    46                              <1>  opt0_str: 
+    18 00000165 0A2D2D2D205B52554E- <1>  .start: db %1
+    18 0000016E 20315D204F7074696D- <1>
+    18 00000177 697A6174696F6E2073- <1>
+    18 00000180 7465703A206E6F206F- <1>
+    18 00000189 7074696D697A617469- <1>
+    18 00000192 6F6E202D2D2D0A      <1>
+    19                              <1>  .length: equ $-.start
+    47                                      opt1_str:      STRING    {10,"--- [RUN 2] Optimization step: n-th pass finds the n-th largest ---",10}
+    47                              <1>  opt1_str: 
+    18 00000199 0A2D2D2D205B52554E- <1>  .start: db %1
+    18 000001A2 20325D204F7074696D- <1>
+    18 000001AB 697A6174696F6E2073- <1>
+    18 000001B4 7465703A206E2D7468- <1>
+    18 000001BD 20706173732066696E- <1>
+    18 000001C6 647320746865206E2D- <1>
+    18 000001CF 7468206C6172676573- <1>
+    18 000001D8 74202D2D2D0A        <1>
+    19                              <1>  .length: equ $-.start
+    48                                      opt2_str:      STRING    {10,"--- [RUN 3] Optimization step: no check after last swap ---",10}
+    48                              <1>  opt2_str: 
+    18 000001DE 0A2D2D2D205B52554E- <1>  .start: db %1
+    18 000001E7 20335D204F7074696D- <1>
+    18 000001F0 697A6174696F6E2073- <1>
+    18 000001F9 7465703A206E6F2063- <1>
+    18 00000202 6865636B2061667465- <1>
+    18 0000020B 72206C617374207377- <1>
+    18 00000214 6170202D2D2D0A      <1>
+    19                              <1>  .length: equ $-.start
+    49                                  
+    50                                      unsorted:      STRING    {"The UNSORTED array:",10,"-------------------",10}
+    50                              <1>  unsorted: 
+    18 0000021B 54686520554E534F52- <1>  .start: db %1
+    18 00000224 544544206172726179- <1>
+    18 0000022D 3A0A2D2D2D2D2D2D2D- <1>
+    18 00000236 2D2D2D2D2D2D2D2D2D- <1>
+    18 0000023F 2D2D2D0A            <1>
+    19                              <1>  .length: equ $-.start
+    51                                      sorted:        STRING    {10,"The SORTED array:",10,"-----------------",10}
+    51                              <1>  sorted: 
+    18 00000243 0A54686520534F5254- <1>  .start: db %1
+    18 0000024C 45442061727261793A- <1>
+    18 00000255 0A2D2D2D2D2D2D2D2D- <1>
+    18 0000025E 2D2D2D2D2D2D2D2D2D- <1>
+    18 00000267 0A                  <1>
+    19                              <1>  .length: equ $-.start
+    52                                      iterations:    STRING    {10,"Number of iterations: "}
+    52                              <1>  iterations: 
+    18 00000268 0A4E756D626572206F- <1>  .start: db %1
+    18 00000271 662069746572617469- <1>
+    18 0000027A 6F6E733A20          <1>
+    19                              <1>  .length: equ $-.start
+    53                                      swaps:         STRING    {"Number of swaps     : "}
+    53                              <1>  swaps: 
+    18 0000027F 4E756D626572206F66- <1>  .start: db %1
+    18 00000288 207377617073202020- <1>
+    18 00000291 20203A20            <1>
+    19                              <1>  .length: equ $-.start
+    54                                      lf:            STRING    {10}
+    54                              <1>  lf: 
+    18 00000295 0A                  <1>  .start: db %1
+    19                              <1>  .length: equ $-.start
+    55                                       
+    56                                  section .text
+    57                                      global _start
+    58                                       
+    59                                  _start:
+    60                                      ; Toon algemene titel
+    61 00000000 48BE-                       mov        rsi, title
+    61 00000002 [F000000000000000] 
+    62 0000000A BA75000000                  mov        rdx, title.length
+    63 0000000F E867030000                  call       Print.string
+    64                                  
+    65                                      ; ==========================================
+    66                                      ; RUN 1: No Optimization
+    67                                      ; ==========================================
+    68 00000014 48BE-                       mov        rsi, opt0_str
+    68 00000016 [6501000000000000] 
+    69 0000001E BA34000000                  mov        rdx, opt0_str.length
+    70 00000023 E853030000                  call       Print.string
+    71                                      
+    72 00000028 E8DD010000                  call       ResetWorkArray
+    73                                      
+    74 0000002D 48BE-                       mov        rsi, unsorted
+    74 0000002F [1B02000000000000] 
+    75 00000037 BA28000000                  mov        rdx, unsorted.length
+    76 0000003C E83A030000                  call       Print.string
+    77 00000041 E854020000                  call       ShowArray
+    78                                      
+    79 00000046 E887000000                  call       BubbleSort0
+    80 0000004B E8DE010000                  call       PrintResults
+    81                                  
+    82                                      ; ==========================================
+    83                                      ; RUN 2: n-th pass finds n-th largest
+    84                                      ; ==========================================
+    85 00000050 48BE-                       mov        rsi, opt1_str
+    85 00000052 [9901000000000000] 
+    86 0000005A BA45000000                  mov        rdx, opt1_str.length
+    87 0000005F E817030000                  call       Print.string
+    88                                      
+    89 00000064 E8A1010000                  call       ResetWorkArray
+    90                                      
+    91 00000069 48BE-                       mov        rsi, unsorted
+    91 0000006B [1B02000000000000] 
+    92 00000073 BA28000000                  mov        rdx, unsorted.length
+    93 00000078 E8FE020000                  call       Print.string
+    94 0000007D E818020000                  call       ShowArray
+    95                                      
+    96 00000082 E8A9000000                  call       BubbleSort1
+    97 00000087 E8A2010000                  call       PrintResults
+    98                                  
+    99                                      ; ==========================================
+   100                                      ; RUN 3: No check after last swap
+   101                                      ; ==========================================
+   102 0000008C 48BE-                       mov        rsi, opt2_str
+   102 0000008E [DE01000000000000] 
+   103 00000096 BA3D000000                  mov        rdx, opt2_str.length
+   104 0000009B E8DB020000                  call       Print.string
+   105                                      
+   106 000000A0 E865010000                  call       ResetWorkArray
+   107                                      
+   108 000000A5 48BE-                       mov        rsi, unsorted
+   108 000000A7 [1B02000000000000] 
+   109 000000AF BA28000000                  mov        rdx, unsorted.length
+   110 000000B4 E8C2020000                  call       Print.string
+   111 000000B9 E8DC010000                  call       ShowArray
+   112                                      
+   113 000000BE E8D7000000                  call       BubbleSort2
+   114 000000C3 E866010000                  call       PrintResults
+   115                                  
+   116                                  Exit:      
+   117 000000C8 4831FFB83C0000000F-         syscall   exit, 0
+   117 000000D1 05                 
+   118                                  
+   119                                  ; ==========================================
+   120                                  ; ALGORITME SUBROUTINES
+   121                                  ; ==========================================
+   122                                  
+   123                                  ; --- VARIANT 0: Geen optimalisatie ---
+   124                                  BubbleSort0:
+   125 000000D2 53                          push       rbx
+   126 000000D3 51                          push       rcx
+   127 000000D4 52                          push       rdx
+   128 000000D5 56                          push       rsi
+   129 000000D6 4D31C0                      xor        r8,r8                         ; number of iterations
+   130 000000D9 4D31C9                      xor        r9,r9                         ; number of swaps
+   131                                  .repeat:      
+   132 000000DC BA00000000                  mov        rdx, FALSE                    ; isSwapped = false
+   133 000000E1 B901000000                  mov        rcx,1                         ; i = 1
+   134 000000E6 48BE-                       mov        rsi,work_array                ; point to start of the array      
+   134 000000E8 [1400000000000000] 
+   135                                  .for:
+   136 000000F0 48AD                        lodsq                                    ; RBX = array[i]
+   137 000000F2 4889C3                      mov        rbx, rax
+   138 000000F5 48AD                        lodsq                                    ; RAX = array[i+1]
+   139 000000F7 4839D8                      cmp        rax, rbx                      ; if array[i+1] >= array[i]
+   140 000000FA 7D19                        jge        .next
+   141 000000FC 4831D8                      xor        rax, rbx                      ; if less then swap both values            
+   142 000000FF 4831C3                      xor        rbx, rax
+   143 00000102 4831D8                      xor        rax, rbx
+   144 00000105 48895EF0                    mov        qword [rsi-datasize*2], rbx   ; and store swapped values in array
+   145 00000109 488946F8                    mov        qword [rsi-datasize], rax
+   146 0000010D BA01000000                  mov        rdx,TRUE                      ; isSwapped = true
+   147 00000112 49FFC1                      inc        r9                            ; increment number of swaps
+   148                                  .next:
+   149 00000115 49FFC0                      inc        r8                            ; increment number of iterations
+   150 00000118 4883EE08                    sub        rsi,datasize                  ; adjust pointer in array      
+   151 0000011C 48FFC1                      inc        rcx                           ; i++
+   152 0000011F 4883F91D                    cmp        rcx,orig_array.length-1       ; if i <= arrayLength-1
+   153 00000123 7ECB                        jle        .for                          ; next comparison
+   154                                  .until:
+   155 00000125 4883FA01                    cmp        rdx,TRUE                      ; if isSwapped == true
+   156 00000129 74B1                        je         .repeat                       ; then repeat sort algorithm
+   157 0000012B 5E                          pop        rsi
+   158 0000012C 5A                          pop        rdx
+   159 0000012D 59                          pop        rcx
+   160 0000012E 5B                          pop        rbx
+   161 0000012F C3                          ret
+   162                                  
+   163                                  ; --- VARIANT 1: n-de pass vindt n-de grootste ---
+   164                                  BubbleSort1:
+   165 00000130 53                          push       rbx
+   166 00000131 51                          push       rcx
+   167 00000132 52                          push       rdx
+   168 00000133 56                          push       rsi
+   169 00000134 4152                        push       r10
+   170 00000136 4D31C0                      xor        r8,r8                         ; number of iterations
+   171 00000139 4D31C9                      xor        r9,r9                         ; number of swaps
+   172 0000013C 41BA1E000000                mov        r10, orig_array.length        
+   173                                  .repeat:      
+   174 00000142 BA00000000                  mov        rdx, FALSE                    ; isSwapped = false
+   175 00000147 B901000000                  mov        rcx,1                         ; i = 1
+   176 0000014C 48BE-                       mov        rsi,work_array                ; point to start of the array      
+   176 0000014E [1400000000000000] 
+   177                                  .for:
+   178 00000156 48AD                        lodsq                                    ; RBX = array[i]
+   179 00000158 4889C3                      mov        rbx, rax
+   180 0000015B 48AD                        lodsq                                    ; RAX = array[i+1]
+   181 0000015D 4839D8                      cmp        rax, rbx                      ; if array[i+1] >= array[i]
+   182 00000160 7D19                        jge        .next
+   183 00000162 4831D8                      xor        rax, rbx                      ; then swap both values            
+   184 00000165 4831C3                      xor        rbx, rax
+   185 00000168 4831D8                      xor        rax, rbx
+   186 0000016B 48895EF0                    mov        qword [rsi-datasize*2], rbx   ; and store swapped values in array
+   187 0000016F 488946F8                    mov        qword [rsi-datasize], rax
+   188 00000173 BA01000000                  mov        rdx,TRUE                      ; isSwapped = true
+   189 00000178 49FFC1                      inc        r9                            ; increment number of swaps
+   190                                  .next:
+   191 0000017B 49FFC0                      inc        r8                            ; increment number of iterations
+   192 0000017E 4883EE08                    sub        rsi,datasize                  ; adjust pointer in array     
+   193 00000182 48FFC1                      inc        rcx                           ; i++
+   194 00000185 4C39D1                      cmp        rcx,r10                       ; if i <= arrayLength-1
+   195 00000188 7ECC                        jle        .for                          ; next comparison
+   196                                  .until:
+   197 0000018A 49FFCA                      dec        r10                           
+   198 0000018D 4883FA01                    cmp        rdx,TRUE                      ; if isSwapped == true
+   199 00000191 74AF                        je         .repeat                       ; then repeat sort algorithm
+   200 00000193 415A                        pop        r10
+   201 00000195 5E                          pop        rsi
+   202 00000196 5A                          pop        rdx
+   203 00000197 59                          pop        rcx
+   204 00000198 5B                          pop        rbx
+   205 00000199 C3                          ret
+   206                                  
+   207                                  ; --- VARIANT 2: Geen controle na laatste swap ---
+   208                                  BubbleSort2:
+   209 0000019A 53                          push       rbx
+   210 0000019B 51                          push       rcx
+   211 0000019C 52                          push       rdx
+   212 0000019D 56                          push       rsi
+   213 0000019E 4152                        push       r10
+   214 000001A0 4153                        push       r11
+   215 000001A2 4D31C0                      xor        r8,r8                         ; number of iterations
+   216 000001A5 4D31C9                      xor        r9,r9                         ; number of swaps
+   217 000001A8 41BA1E000000                mov        r10, orig_array.length        ; r10 = n = arrayLength
+   218                                  .repeat:
+   219 000001AE 41BB00000000                mov        r11, 0                        ; r11 = newn = 0
+   220 000001B4 B901000000                  mov        rcx,1                         ; i = 1
+   221 000001B9 48BE-                       mov        rsi,work_array                ; point to start of the array      
+   221 000001BB [1400000000000000] 
+   222                                  .for:
+   223 000001C3 48AD                        lodsq                                    ; RBX = array[i]
+   224 000001C5 4889C3                      mov        rbx, rax
+   225 000001C8 48AD                        lodsq                                    ; RAX = array[i+1]
+   226 000001CA 4839D8                      cmp        rax, rbx                      ; if array[i+1] >= array[i]
+   227 000001CD 7D17                        jge        .next
+   228 000001CF 4831D8                      xor        rax, rbx                      ; then swap both values            
+   229 000001D2 4831C3                      xor        rbx, rax
+   230 000001D5 4831D8                      xor        rax, rbx
+   231 000001D8 4989CB                      mov        r11, rcx                      ; newn = i
+   232 000001DB 48895EF0                    mov        qword [rsi-datasize*2], rbx   ; and store swapped values in array
+   233 000001DF 488946F8                    mov        qword [rsi-datasize], rax
+   234 000001E3 49FFC1                      inc        r9                            ; increment number of swaps
+   235                                  .next:
+   236 000001E6 49FFC0                      inc        r8                            ; increment number of iterations
+   237 000001E9 4883EE08                    sub        rsi,datasize                  ; adjust pointer in array
+   238 000001ED 48FFC1                      inc        rcx                           ; i++
+   239 000001F0 4C39D1                      cmp        rcx, r10                      ; if i <= arrayLength-1
+   240 000001F3 7ECE                        jle        .for
+   241 000001F5 4D89DA                      mov        r10, r11                      ; n = newn
+   242                                  .until:
+   243 000001F8 49FFCA                      dec        r10
+   244 000001FB 4983FA00                    cmp        r10, 0                        ; if r10 > 0
+   245 000001FF 7FAD                        jg         .repeat                       ; then repeat sort algorithm
+   246 00000201 415B                        pop        r11
+   247 00000203 415A                        pop        r10
+   248 00000205 5E                          pop        rsi
+   249 00000206 5A                          pop        rdx
+   250 00000207 59                          pop        rcx
+   251 00000208 5B                          pop        rbx
+   252 00000209 C3                          ret
+   253                                  
+   254                                  ; ==========================================
+   255                                  ; HULPFUNCTIES
+   256                                  ; ==========================================
+   257                                  
+   258                                  ; Kopieert de originele array naar de werk-array
+   259                                  ResetWorkArray:
+   260 0000020A 51                          push       rcx
+   261 0000020B 56                          push       rsi
+   262 0000020C 57                          push       rdi
+   263 0000020D B91E000000                  mov        rcx, orig_array.length
+   264 00000212 48BE-                       mov        rsi, orig_array
+   264 00000214 [0000000000000000] 
+   265 0000021C 48BF-                       mov        rdi, work_array
+   265 0000021E [1400000000000000] 
+   266 00000226 FC                          cld
+   267 00000227 F348A5                      rep movsq
+   268 0000022A 5F                          pop        rdi
+   269 0000022B 5E                          pop        rsi
+   270 0000022C 59                          pop        rcx
+   271 0000022D C3                          ret
+   272                                  
+   273                                  ; Print de resultaten van een run (gesorteerde array + stats)
+   274                                  PrintResults:
+   275 0000022E 50                          push       rax
+   276 0000022F 52                          push       rdx
+   277 00000230 56                          push       rsi
+   278                                      
+   279 00000231 48BE-                       mov        rsi, sorted
+   279 00000233 [4302000000000000] 
+   280 0000023B BA25000000                  mov        rdx, sorted.length
+   281 00000240 E836010000                  call       Print.string
+   282 00000245 E850000000                  call       ShowArray
+   283                                      
+   284                                      ; toon aantal iteraties (staat in R8)
+   285 0000024A 48BE-                       mov        rsi, iterations
+   285 0000024C [6802000000000000] 
+   286 00000254 BA17000000                  mov        rdx, iterations.length
+   287 00000259 E81D010000                  call       Print.string
+   288 0000025E 4C89C0                      mov        rax, r8                       
+   289 00000261 E85B000000                  call       Convert                       
+   290 00000266 E8E3000000                  call       Print.integer
+   291 0000026B E8C1000000                  call       ClearBuffer                   
+   292                                      
+   293                                      ; toon aantal swaps (staat in R9)
+   294 00000270 48BE-                       mov        rsi, swaps
+   294 00000272 [7F02000000000000] 
+   295 0000027A BA16000000                  mov        rdx, swaps.length
+   296 0000027F E8F7000000                  call       Print.string
+   297 00000284 4C89C8                      mov        rax, r9                       
+   298 00000287 E835000000                  call       Convert                       
+   299 0000028C E8BD000000                  call       Print.integer
+   300 00000291 E8D6000000                  call       Print.linefeed
+   301                                      
+   302 00000296 5E                          pop        rsi
+   303 00000297 5A                          pop        rdx
+   304 00000298 58                          pop        rax
+   305 00000299 C3                          ret
+   306                                  
+   307                                  ShowArray:
+   308 0000029A 51                          push       rcx
+   309 0000029B 56                          push       rsi
+   310 0000029C B91E000000                  mov        rcx, orig_array.length        ; show all integers
+   311 000002A1 48BE-                       mov        rsi, work_array               ; start of the work array
+   311 000002A3 [1400000000000000] 
+   312                                  .nextInteger:      
+   313 000002AB 48AD                        lodsq                                    ; get integer
+   314 000002AD E80F000000                  call       Convert                       ; RAX contains the number to convert
+   315 000002B2 E897000000                  call       Print.integer
+   316 000002B7 E875000000                  call       ClearBuffer                   ; clear buffer for next use
+   317 000002BC E2ED                        loop       .nextInteger
+   318 000002BE 5E                          pop        rsi
+   319 000002BF 59                          pop        rcx
+   320 000002C0 C3                          ret
+   321                                  
+   322                                  Convert:
+   323 000002C1 50                          push       rax
+   324 000002C2 53                          push       rbx
+   325 000002C3 52                          push       rdx
+   326 000002C4 57                          push       rdi
+   327 000002C5 51                          push       rcx
+   328 000002C6 48BF-                       mov        rdi,sign
+   328 000002C8 [0000000000000000] 
+   329 000002D0 C60720                      mov        byte[rdi]," "                 ; default no sign
+   330 000002D3 4883F800                    cmp        rax, 0
+   331 000002D7 7D06                        jge        .noSign
+   332 000002D9 C6072D                      mov        byte[rdi],"-"                 ; number is negative
+   333 000002DC 48F7D8                      neg        rax                           ; make positive
+   334                                  .noSign:
+   335 000002DF 48BF-                       mov        rdi, decimal                  ; address of buffer in RDI 
+   335 000002E1 [0100000000000000] 
+   336 000002E9 4883C712                    add        rdi, 18                       ; 0..18 = 19 bytes of storage
+   337                                  .repeat:      
+   338 000002ED 4831D2                      xor        rdx, rdx                      ; remainder will be in RDX
+   339 000002F0 BB0A000000                  mov        rbx, 10
+   340 000002F5 48F7F3                      div        rbx                           ; RDX = remainder of division
+   341 000002F8 80CA30                      or         dl,"0"                        ; make remainder decimal ASCII
+   342 000002FB 8817                        mov        byte[rdi],dl                  ; and store
+   343 000002FD 48FFCF                      dec        rdi                           ; go to previous position
+   344 00000300 4883F800                    cmp        rax, 0                        ; RAX = quotient of division, if zero stop
+   345 00000304 75E7                        jnz        .repeat
+   346                                      
+   347 00000306 8A1425[00000000]            mov        dl ,byte[sign]                ; copy sign character in [RDI] just before the number
+   348 0000030D 8817                        mov        byte[rdi], dl
+   349 0000030F 48FFCF                      dec        rdi                           ; point to position before the sign character
+   350 00000312 4889F9                      mov        rcx, rdi                      ; calculate remaining bytes
+   351 00000315 4881E9[00000000]            sub        rcx, sign
+   352 0000031C 4883F900                    cmp        rcx, 0
+   353 00000320 7E09                        jle        .end
+   354 00000322 48FFC1                      inc        rcx
+   355 00000325 B020                        mov        al," "                        ; fill remaining bytes with spaces
+   356 00000327 FD                          std
+   357                                  .fill:      
+   358 00000328 AA                          stosb
+   359 00000329 E2FD                        loop       .fill
+   360                                  .end:      
+   361 0000032B 59                          pop        rcx
+   362 0000032C 5F                          pop        rdi
+   363 0000032D 5A                          pop        rdx
+   364 0000032E 5B                          pop        rbx
+   365 0000032F 58                          pop        rax
+   366 00000330 C3                          ret
+   367                                       
+   368                                  ClearBuffer:
+   369 00000331 50                          push       rax
+   370 00000332 51                          push       rcx
+   371 00000333 57                          push       rdi
+   372 00000334 48BF-                       mov        rdi, Buffer
+   372 00000336 [0000000000000000] 
+   373 0000033E B914000000                  mov        rcx, 20                       ; 20 bytes to clear
+   374 00000343 4831C0                      xor        rax, rax
+   375 00000346 FC                          cld                                      ; begin at lowest address
+   376                                  .repeat:      
+   377 00000347 AA                          stosb                                    ; erase [RDI]
+   378 00000348 E2FD                        loop       .repeat
+   379 0000034A 5F                          pop        rdi
+   380 0000034B 59                          pop        rcx
+   381 0000034C 58                          pop        rax
+   382 0000034D C3                          ret
+   383                                  
+   384                                  Print:
+   385                                  .integer:
+   386 0000034E 52                          push       rdx
+   387 0000034F 56                          push       rsi
+   388 00000350 48BE-                       mov        rsi,Buffer
+   388 00000352 [0000000000000000] 
+   389 0000035A BA14000000                  mov        rdx, 20                       ; 20 bytes to display
+   390 0000035F E817000000                  call       Print.string
+   391 00000364 E803000000                  call       Print.linefeed
+   392 00000369 5E                          pop        rsi
+   393 0000036A 5A                          pop        rdx
+   394 0000036B C3                          ret
+   395                                  .linefeed:
+   396 0000036C 48BE-                       mov        rsi, lf
+   396 0000036E [9502000000000000] 
+   397 00000376 BA01000000                  mov        rdx, lf.length
+   398                                  .string:  
+   399 0000037B 50                          push       rax
+   400 0000037C 57                          push       rdi
+   401 0000037D 51                          push       rcx                           ; RCX is changed after syscall
+   402 0000037E BF01000000B8010000-         syscall    write, stdout
+   402 00000387 000F05             
+   403 0000038A 59                          pop        rcx
+   404 0000038B 5F                          pop        rdi
+   405 0000038C 58                          pop        rax
+   406 0000038D C3                          ret

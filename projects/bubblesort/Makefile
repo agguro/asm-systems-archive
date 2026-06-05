@@ -20,7 +20,7 @@ OBJS = $(NAME)$(O)
 $(NAME): $(OBJS)
 	$(LD) $(LDFLAGS) -o $(NAME) $(OBJS) $(LIBS)
 
-$(NAME)$(O): $(NAME)$(ASM) optimizingstep0.asm optimizingstep1.asm optimizingstep2.asm
+$(NAME)$(O): $(NAME)$(ASM) optimizingstep0.inc optimizingstep1.inc optimizingstep2.inc
 	$(AS) $(ASFLAGS) $(OPTIMIZE) $(NAME)$(ASM) -l $(NAME)$(LST) -o $(NAME)$(O)
 
 optimize0:
